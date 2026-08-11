@@ -1,22 +1,20 @@
 # Grok Imagine–style Local Media Generator
 
-Local, private AI **image + video** generation designed to feel as easy as [Grok Imagine](https://x.ai/api/imagine)—prompt, generate, refine—running on your own GPU machine via **ComfyUI**.
+Local image + video generation on your RTX 4090, aimed at Grok Imagine–level ease. **ComfyUI is the engine**; you never open its dashboard — workflows and backend setup are handled automatically.
+
+## Your setup (locked)
+
+- **GPU:** RTX 4090 (24 GB) · **OS:** Windows 11 Pro  
+- **Front door:** [Stability Matrix](https://docs.lykos.ai/stability-matrix/getting-started/overview.html) Inference UI (optional SwarmUI)  
+- **Engine:** ComfyUI installed & launched by Stability Matrix; graphs auto-built from the front door  
+- **You never:** open the Comfy web UI / node editor for normal use  
+- **Models:** Drag-drop checkpoints / in-app browser — **SDXL & Illustrious** first-class
 
 ## Status
 
-**Research & planning complete.** See **[PLAN.md](./PLAN.md)** for capability mapping, architecture options, model pack, UX targets, and phased build plan.
+Research & plan refined for the constraints above. See **[PLAN.md](./PLAN.md)**.
 
-## Direction (short)
+## Next docs (planned)
 
-| Layer | Choice |
-| --- | --- |
-| Engine | ComfyUI (API + workflows) |
-| Day-1 usability | SwarmUI via Stability Matrix |
-| Target product UX | Thin Imagine-style UI (modes: Image · Edit · Video · Animate) |
-| Default models | Flux (image), Qwen-Image-Edit (edit), Wan 2.2 + LTX-2.3 (video / A/V) |
-
-## Next
-
-1. Confirm local GPU VRAM / OS.
-2. Phase 1: install Stability Matrix + SwarmUI + curated models (smoke-test image + video).
-3. Phase 2–3: versioned Comfy workflows + Imagine UI in this repo.
+- `SETUP-WINDOWS.md` — click-path install + first Illustrious image  
+- `MODELS.md` — starter Illustrious/SDXL/Flux/Wan list and where to drop files  

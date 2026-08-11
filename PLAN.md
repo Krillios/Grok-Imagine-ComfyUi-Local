@@ -1,289 +1,268 @@
 # Grok Imagine–style Local Media Generator — Research & Plan
 
-**Goal:** A local system that feels as easy as Grok Imagine (prompt → media, iterate in plain language) while running on a powerful personal GPU machine.
-
-**Repo intent:** `Grok-Imagine-ComfyUi-Local` — ComfyUI as the generation engine, with a deliberately simple front door.
+**Goal:** A local system that feels as easy as Grok Imagine (prompt → media, iterate) on your RTX 4090 — powered by ComfyUI under the hood, with **all backend/workflow setup automatic** so you never open the ComfyUI dashboard.
 
 ---
 
-## 1. What “as easy as Grok Imagine” actually means
+## Hard constraints (locked)
 
-Grok Imagine is not a node graph or a parameter panel. It is a **product UX** with these jobs:
-
-| Job | Grok Imagine behavior |
+| Constraint | Implication |
 | --- | --- |
-| Text → image | One prompt, few or no knobs, multiple variants |
-| Image edit | Natural-language instruction on 1–3 reference images |
-| Text / image → video | Short clips; image-to-video is first-class |
-| Video edit / extend / restyle | Keep iterating in the same session |
-| Projects + library | Organize and find past work |
-| Parallel agents | Queue multiple jobs without babysitting |
-| Native audio (video) | Sound generated with the clip (Aurora / Video 1.5) |
+| **RTX 4090 (24 GB), Windows 11 Pro** | Full-quality Flux + SDXL/Illustrious + Wan/LTX video are all in range |
+| **ComfyUI is fine as the engine** | We *want* ComfyUI’s model support and speed — just not its UI |
+| **Backend + workflows set up automatically** | Installer/front door installs Comfy, deps, and builds graphs for you |
+| **Never see the ComfyUI dashboard** | No node editor, no workflow JSON, no “Queue Prompt” in Comfy’s web UI |
+| **Drag-drop checkpoints into the UI** | Shared model library with import-by-drop + CivitAI/HF browser |
+| **SDXL + Illustrious required** | First-class checkpoint list; Illustrious is a normal SDXL `.safetensors` family |
 
-**UX principles to copy (non-negotiable):**
-
-1. **One text box + Generate** as the default path.
-2. **Modes as tabs or chips**, not workflows: Image · Edit · Video · Animate.
-3. **Click a result → refine** (“make it dusk”, “slow push-in”) without leaving the canvas.
-4. **Hide samplers, CFG, steps, node graphs** behind an Advanced drawer.
-5. **Sensible defaults** per mode so first output is usable.
-
-Anything that forces the user into ComfyUI nodes fails the ease goal—even if ComfyUI remains the backend.
-
----
-
-## 2. Local capability map (2026)
-
-Open local stacks can cover most Imagine features. Exact parity with Aurora (speed, physics, native audio quality) on a single consumer GPU is **not** realistic; the product goal is **same workflow, good enough quality, private, free to run**.
-
-| Imagine feature | Best local stand-ins | Notes |
-| --- | --- | --- |
-| Text → image | **FLUX.2 / FLUX.1**, Z-Image Turbo, Qwen-Image | Flux family ≈ Imagine’s Flux-based stills heritage |
-| Image edit (NL) | **Qwen-Image-Edit** (Apache) or **FLUX.1 Kontext [dev]** | Qwen better for multi-ref + text-in-image + commercial-friendly license; Kontext strong on identity/photoreal |
-| Multi-image edit (≤3) | Qwen-Image-Edit | Closest to Imagine’s multi-ref edit |
-| Text → video | **Wan 2.2**, **LTX-2.3**, HunyuanVideo 1.5 | Wan = quality/control; LTX = native A/V |
-| Image → video | Wan 2.2 TI2V / I2V, LTX I2V | Primary “animate this still” path |
-| Native audio | **LTX-2.3** (synced A/V) | Closest open match to Imagine Video audio |
-| Video edit / extend | ComfyUI Wan/LTX extend + edit workflows | More manual than Imagine API today |
-| Chat-like iteration | Custom UI **or** SwarmUI + saved presets | Must be built or configured; not free with raw ComfyUI |
-
-### Hardware reality check
-
-Assume a **powerful local PC** means roughly:
-
-| GPU VRAM | Practical sweet spot |
-| --- | --- |
-| **12–16 GB** | Fast images (Flux fp8 / GGUF); video via Wan 5B or quantized 14B / LTX GGUF |
-| **24 GB** (4090 / 3090) | Comfortable Flux + Wan 14B FP8 / LTX FP8 — **recommended minimum for “Imagine-like” video** |
-| **32–48 GB+** | Higher res, longer clips, less offloading, parallel jobs |
-
-Also plan for: **≥64 GB system RAM** (T5 / VL encoders often CPU-offload), **fast NVMe** (models are tens–hundreds of GB), **CUDA NVIDIA** as the default path (AMD/Apple work but with more friction).
-
----
-
-## 3. Architecture options
-
-### Option A — Install-and-go (fastest)
-
-**Stability Matrix** → install **SwarmUI** (and optionally ComfyUI) → download curated models.
-
-- Pros: One installer, shared model store, SwarmUI Generate tab is dial-driven and beginner-friendly; video models (Wan, Hunyuan) supported; can drop into Comfy graph when needed.
-- Cons: Not chat/project-identical to grok.com/imagine; still “AI art UI”, not a conversational product.
-
-### Option B — ComfyUI-only + templates
-
-ComfyUI Desktop / portable + Manager + official templates (Flux, Qwen Edit, Wan, LTX).
-
-- Pros: Newest models first; best long-term engine; API for automation.
-- Cons: Node UI fails the ease goal unless heavily templated and users never open the graph.
-
-### Option C — Custom “Imagine” frontend on ComfyUI API (**best match to repo + goal**)
-
-Thin web app (prompt, modes, gallery, projects) that POSTs **pre-baked ComfyUI workflow JSON** with only prompt/images/duration/aspect swapped.
+### Invisible-Comfy principle
 
 ```
-┌─────────────────────────────────────────┐
-│  Imagine UI (chat / modes / gallery)    │
-│  - Image | Edit | Video | Animate       │
-│  - Projects, history, parallel queue    │
-└─────────────────┬───────────────────────┘
-                  │ HTTP + WebSocket
-┌─────────────────▼───────────────────────┐
-│  ComfyUI server (engine)                │
-│  workflows/: t2i, edit, i2v, t2v, extend│
-└─────────────────┬───────────────────────┘
-                  │
-┌─────────────────▼───────────────────────┐
-│  Models on disk (Flux / Qwen / Wan / LTX)│
-└─────────────────────────────────────────┘
+You see:     prompt · mode · model dropdown · Generate · gallery · drag-drop models
+You never:   Comfy web UI · node graph · wiring Load Checkpoint → KSampler → VAE Decode
+Comfy does:  everything behind the API (graphs auto-built by Stability Matrix / SwarmUI)
 ```
 
-- Pros: Closest to Grok Imagine ease; full control of UX; ComfyUI stays the power tool underneath.
-- Cons: Requires building/maintaining the UI and workflow pack; model downloads still manual or scripted.
-
-### Option D — Hybrid (**recommended**)
-
-1. **Day 0–1:** Stability Matrix + SwarmUI + models → usable immediately.
-2. **Week 1:** Lock a small set of ComfyUI workflows that map 1:1 to Imagine modes.
-3. **Week 2+:** Ship a minimal Imagine-style UI that only exposes those modes (this repo’s product surface).
-4. Keep SwarmUI/ComfyUI available for power users.
-
-This maximizes “easy now” without blocking “as easy as Imagine” later.
+Allowed: ComfyUI running as a local service.  
+Not allowed (for daily use): you configuring or even looking at that service’s dashboard.
 
 ---
 
-## 4. Recommended model pack
+## Locked architecture (recommended)
 
-Curate a **small** default set so the UI never asks “which checkpoint?”.
+```
+┌──────────────────────────────────────────────────────────┐
+│  YOUR UI (Stability Matrix Inference, optional SwarmUI)  │
+│  • Modes: Image / Img2Img / Upscale / Wan video          │
+│  • Model Browser + drag-drop checkpoints / LoRAs         │
+│  • Outputs gallery + projects                            │
+│  • Auto-builds Comfy graphs from panel settings          │
+└────────────────────────────┬─────────────────────────────┘
+                             │ HTTP/WS API only (headless to you)
+┌────────────────────────────▼─────────────────────────────┐
+│  ComfyUI (auto-installed backend)                        │
+│  Installed & launched by Stability Matrix                │
+│  Workflows generated programmatically — not by you       │
+│  Dashboard: do not open                                  │
+└────────────────────────────┬─────────────────────────────┘
+                             │
+┌────────────────────────────▼─────────────────────────────┐
+│  Shared Models folder                                    │
+│  Drop Illustrious/SDXL/Flux/Wan files → appear in UI list│
+└──────────────────────────────────────────────────────────┘
+```
 
-### Images
+**How “automatic workflow setup” works in practice**
 
-| Role | Model | Why |
-| --- | --- | --- |
-| Default T2I | FLUX.1 / FLUX.2 (fp8 or GGUF) | Quality + prompt adherence; Imagine heritage |
-| Fast / draft | Z-Image Turbo or Flux Schnell-class | Seconds, not minutes |
-| Edit | **Qwen-Image-Edit** (fp8/GGUF) | NL edit + multi-image; Apache-friendly |
-| Optional photoreal edit | FLUX.1 Kontext [dev] | Character consistency; check BFL license for commercial use |
+1. You install **Stability Matrix** (one Windows app).  
+2. SM’s Package Manager installs **ComfyUI** (Python, torch, custom nodes as needed).  
+3. You use **Inference** (or SwarmUI). When you hit Generate, the front door **assembles a Comfy graph from your panel choices** and submits it to Comfy’s API.  
+4. You only ever change: prompt, model (Illustrious/SDXL/…), aspect, steps if you want — never nodes.
 
-### Video
+**Optional:** SwarmUI Generate tab — same idea (Comfy backend, dial UI, auto workflows). Still never open Comfy’s own UI.
 
-| Role | Model | Why |
-| --- | --- | --- |
-| Default I2V / T2V | **Wan 2.2** (5B for speed, 14B for quality) | Strong open motion quality |
-| Audio-capable | **LTX-2.3** | Closest to Imagine’s native sound |
-| Low-VRAM fallback | Wan 1.3B / aggressive GGUF | Keep the machine usable under load |
+### Why this stack
 
-### Defaults the UI should set (user never sees)
+| Need | Stability Matrix Inference | SwarmUI | Custom Imagine UI | Raw ComfyUI dashboard |
+| --- | --- | --- | --- | --- |
+| Auto-install Comfy backend | Yes | Via SM or own installer | We’d have to automate it | Manual / Desktop |
+| Auto-build workflows | Yes (panel → graph) | Yes (Generate → graph) | Yes (if we ship baked JSON) | **You build them** |
+| Hide Comfy dashboard | Yes | Yes | Yes | **No — that is the UI** |
+| Drag-drop checkpoints | Yes | Yes | Build it | Folder only |
+| SDXL / Illustrious | Yes | Yes | Yes | Yes |
+| Video (Wan) | Yes | Yes | Later | Manual workflows |
 
-- Aspect: 1:1 image, 16:9 / 9:16 video
-- Duration: 5–6 s default (offer 10–15 s if VRAM allows)
-- Resolution: 1024-class images; 480p draft / 720p final video
-- Steps / CFG / sampler: baked into workflow JSON
-
----
-
-## 5. Product UX sketch (target)
-
-Mirror grok.com/imagine, not Automatic1111.
-
-**First screen**
-
-- Brand / product name
-- Big prompt box
-- Mode chips: `Image` · `Edit` · `Video` · `Animate`
-- One primary CTA: **Generate**
-- Aspect + (for video) duration only
-
-**After generate**
-
-- Grid of results
-- On select: `Animate` · `Edit` · `Vary` · `Extend` · `Download`
-- Thread of refinements (chat-style history attached to the asset)
-
-**Left rail**
-
-- Projects
-- Library (searchable)
-- Queue (parallel jobs)
-
-**Never on the main path**
-
-- Node graphs, LoRA stacks, ControlNet wiring, sampler menus
-
-Advanced users open “Open in ComfyUI” to break glass.
+**Decision:** Day‑1 product = **Stability Matrix + Inference**, ComfyUI as invisible auto-managed backend. SwarmUI optional. Custom chat shell only if you still want more “Imagine” after that.
 
 ---
 
-## 6. Phased implementation plan
+## Hardware profile (your machine)
 
-### Phase 0 — Hardware & baseline (short)
-
-- Confirm GPU (NVIDIA + VRAM), RAM, disk free space (≥500 GB recommended for image+video pack).
-- Install latest NVIDIA drivers + CUDA-capable stack.
-- Decide primary OS path: **Windows** (easiest installers) or **Linux** (best long-term for headless/API).
-
-**Exit criteria:** `nvidia-smi` healthy; ≥200 GB free on model drive.
-
-### Phase 1 — Working local studio (no custom code)
-
-1. Install [Stability Matrix](https://lykos.ai/stability-matrix) (or ComfyUI Desktop if preferred).
-2. Install packages: **ComfyUI** + **SwarmUI**.
-3. Download the curated model pack (scripted checklist in-repo later).
-4. Verify four smoke tests:
-   - Text → image (Flux)
-   - Image → edit (Qwen-Image-Edit)
-   - Image → video (Wan I2V)
-   - Text → video with audio (LTX-2.3), if VRAM allows
-
-**Exit criteria:** Non-technical user can produce an image and an animated clip from SwarmUI without touching nodes.
-
-### Phase 2 — Imagine mode workflows (ComfyUI JSON)
-
-Create and version-control a workflow pack:
-
-| File | Maps to Imagine |
+| Spec | Plan assumption |
 | --- | --- |
-| `workflows/t2i_flux.json` | Image generation |
-| `workflows/edit_qwen.json` | NL image edit (+ multi-ref) |
-| `workflows/i2v_wan.json` | Animate still |
-| `workflows/t2v_wan.json` | Text → video |
-| `workflows/t2v_ltx_av.json` | Video + audio |
-| `workflows/extend_video.json` | Continue clip |
+| GPU | **RTX 4090 24 GB** — treat as “full pack” tier |
+| OS | **Windows 11 Pro** — use official Stability Matrix `win-x64` release |
+| System RAM | Prefer **64 GB** if available (video + big text encoders); **32 GB** workable |
+| Disk | Fast NVMe; budget **≥500 GB–1 TB** free for models (Illustrious/SDXL packs add up fast) |
+| Drivers | Current Game Ready / Studio NVIDIA driver before first launch |
 
-Expose only: `prompt`, `seed`, `aspect_ratio`, `duration`, `input_images[]`.
+On a 4090 you can comfortably run:
 
-Document one-command launch: start ComfyUI with API, load defaults.
-
-**Exit criteria:** Each mode runnable via ComfyUI API with a single JSON body.
-
-### Phase 3 — Imagine-style web UI (this repo’s main product)
-
-Minimal stack suggestion:
-
-- **Frontend:** Next.js or Vite + React (gallery, modes, chat refine)
-- **Backend:** thin Node/Python proxy → ComfyUI HTTP/WS (queue, progress, history)
-- **Storage:** local `outputs/` + SQLite/JSON for projects & metadata
-- **Optional:** local LLM (Ollama) only for prompt expansion—not required for v1
-
-v1 scope (keep narrow):
-
-1. Image generate + history  
-2. Edit with upload / last image  
-3. Animate (I2V)  
-4. Projects + download  
-
-Defer: video edit parity, multi-agent parallelism UI polish, mobile app.
-
-**Exit criteria:** Someone who uses Grok Imagine can generate and refine without reading a manual.
-
-### Phase 4 — Polish for “daily driver”
-
-- One-click start script / systemd / Windows service
-- Model auto-download + disk budget warnings
-- Queue + multi-job (SwarmUI “swarm” or custom queue)
-- Optional LAN access (auth!) for phone/tablet on home network
-- Backup/export of project library
+- SDXL / Illustrious at 1024–1536 native, high steps, batches of 2–4
+- Flux fp8 / full-ish quality stills
+- Wan 2.2 14B FP8 or strong GGUF; Wan 5B for faster I2V
+- LTX-2.x FP8 for video+audio experiments
 
 ---
 
-## 7. What we will not match (honest gaps)
+## What “as easy as Grok Imagine” means here
 
-| Gap | Mitigation |
-| --- | --- |
-| Aurora speed (~25s for 6s 720p on their infra) | Local often minutes; show progress + draft-first (480p) |
-| Video physics / audio polish | Prefer LTX for A/V; Wan for silent quality; don’t oversell |
-| True multi-turn agent “just chat” | UI can feel chatty; full LLM agent is optional Phase 4+ |
-| Zero setup | Local always needs GPU drivers + large downloads once |
-| Cloud convenience | Privacy and cost are the trade |
+Still the same product jobs — but delivered through **Inference tabs / Swarm Generate**, not chat-on-xAI:
+
+1. Open Stability Matrix → Inference → type prompt → Generate  
+2. Modes as tabs: Text to Image · Image to Image · Wan Image to Video · Wan Text to Video · Upscale  
+3. Pick an Illustrious/SDXL/Flux checkpoint from a **dropdown fed by your library**  
+4. Drop new `.safetensors` into the Checkpoint Manager (or use Model Browser) → they appear in the list  
+5. Never open the ComfyUI web dashboard; never paste workflow JSON; never wire nodes  
+
+ComfyUI can (and should) be running in the background. Ease = **not looking at it**.
+
+Close enough for daily use; true multi-turn “agent chat” remains a later nice-to-have, not a setup blocker.
 
 ---
 
-## 8. Decision summary
+## Model strategy (your library, not our workflows)
 
-| Decision | Choice | Rationale |
+### How you add models (required UX)
+
+1. **Drag-drop** into Stability Matrix Checkpoint / Model Manager (auto-sorts type when possible; CivitAI metadata fetch optional).  
+2. **Model Browser** inside the app → CivitAI / HuggingFace → download into the shared `Models` tree.  
+3. Or copy files into the shared folders (e.g. `Data\Models\StableDiffusion` for checkpoints); the UI refreshes the usable list.
+
+No per-model Comfy graph. If a file is a standard SDXL/Illustrious checkpoint, select it and generate.
+
+### Recommended starter pack (4090)
+
+| Role | What to get | Notes |
 | --- | --- | --- |
-| Engine | **ComfyUI** | Matches repo; newest models; real API |
-| Day-1 UI | **SwarmUI via Stability Matrix** | Easy without building first |
-| Target UX | **Custom Imagine UI** over Comfy workflows | Only path that feels like Grok Imagine |
-| Default image | Flux family | Quality + Imagine lineage |
-| Default edit | Qwen-Image-Edit | Multi-ref NL edit, friendlier license |
-| Default video | Wan 2.2 + LTX-2.3 | Quality + native audio respectively |
-| Strategy | **Hybrid phases 0→4** | Easy now, Imagine-like soon |
+| **Illustrious (primary anime/illust)** | A current Illustrious XL / community fine-tune from CivitAI | Booru-style tags; CFG often ~3–6; 1024² or 1536-class |
+| **SDXL general / realism** | One clean SDXL or popular realism checkpoint | Natural-language prompts work better than pure tags |
+| **LoRAs** | Character / style LoRAs matching Illustrious or SDXL base | Drop into LoRA folder; enable from UI |
+| **Optional Flux** | Flux fp8 (quality / prompt adherence) | Different “feel” from Illustrious; keep as second lane |
+| **Video** | Wan 2.2 (I2V/T2V); optional LTX for A/V | Use Inference’s Wan tabs or SwarmUI video — still no nodes |
+| **VAE / upscalers** | SDXL VAE if a ckpt needs it; 4× upscaler | Usually auto or one dropdown |
+
+### Illustrious usage notes (UI only)
+
+- Prompt with **comma-separated tags** (Danbooru-style), not long Flux-style prose.  
+- Put subject/character tags first.  
+- Keep CFG moderate (community often lands ~3–6).  
+- Works as a normal **SDXL checkpoint** in Stability Matrix / SwarmUI — no special “Illustrious workflow.”
 
 ---
 
-## 9. Immediate next actions (when leaving research)
+## Day-1 install playbook (you click; app installs backend)
 
-1. Confirm GPU model / VRAM / OS (sizes the model pack).
-2. Run Phase 1 on the local machine (Stability Matrix + SwarmUI + smoke tests).
-3. In this repo: add `workflows/`, `scripts/download-models.sh`, and a minimal UI scaffold for Phase 3.
-4. Freeze a “default pack” so the UI never exposes model hunting.
+Exact buttons may shift slightly by Stability Matrix version; intent is fixed.
+
+1. Install current **NVIDIA driver** for the 4090.  
+2. Download **Stability Matrix** Windows build from the official GitHub/releases / [docs](https://docs.lykos.ai/stability-matrix/getting-started/overview.html).  
+3. Unzip to a path on a **large fast drive** (e.g. `D:\StabilityMatrix`). Prefer portable/data-dir on that drive.  
+4. First-launch wizard → set Data Directory on that drive.  
+5. **Packages → Add → ComfyUI** → install.  
+   - This *is* the backend. You install it through the app once. You do **not** configure it.  
+6. Open **Inference** → Launch backend when prompted → generate a test SDXL/Illustrious image.  
+7. **Models:**  
+   - Browser-download Illustrious + one SDXL ckpt, **or**  
+   - Drag-drop existing `.safetensors` into Checkpoint Manager.  
+8. Optional: Packages → Add → **SwarmUI** if you want that Generate UI; point it at the shared model root (SM usually shares automatically).  
+9. Never open “ComfyUI” from the package list for daily work unless troubleshooting.
+
+**Success =** prompt → image with Illustrious selected, after only Stability Matrix UI actions.
 
 ---
 
-## 10. Sources (research snapshot)
+## Capability map vs Grok Imagine (with this stack)
 
-- xAI Imagine capabilities: [docs.x.ai Imagine](https://docs.x.ai/developers/model-capabilities/imagine), [Imagine API](https://x.ai/api/imagine), [Video 1.5](https://x.ai/news/grok-imagine-video-1-5)
-- Local UIs: [SwarmUI](https://github.com/mcmonkeyprojects/SwarmUI), [Stability Matrix](https://docs.lykos.ai/stability-matrix/getting-started/overview.html), [InvokeAI](https://github.com/invoke-ai/InvokeAI), ComfyUI
-- Edit models: ComfyUI Flux Kontext / Qwen-Image-Edit tutorials
-- Video models: Wan 2.2, LTX-2.3, HunyuanVideo community VRAM guides (2026)
+| Imagine job | How you do it (no nodes) | 4090 fit |
+| --- | --- | --- |
+| Text → image | Inference Text to Image; pick Illustrious/SDXL/Flux | Excellent |
+| Image edit / restyle | Inference Image to Image (+ later Kontext/Qwen if exposed in UI) | Good |
+| Animate still | Inference Wan Image to Video | Good (minutes, not seconds) |
+| Text → video | Inference Wan Text to Video | Good |
+| Video + audio | LTX path via Swarm/Inference when available; else silent Wan | Partial |
+| Add models | Drag-drop / Model Browser | First-class |
+| Projects | `.smproj` + outputs gallery | Good enough |
+| Chat agents / multi-agent | Not native; defer | Gap |
+
+---
+
+## What we explicitly will not do (per your constraints)
+
+- No manual Python/venv/git Comfy installs as the supported path (SM installs Comfy for you).  
+- No “download this workflow JSON and fix red nodes” user journey.  
+- No requiring you to open or learn the Comfy dashboard/graph for Illustrious, SDXL, or Wan.  
+- No treating “open ComfyUI in the browser” as a normal step in the guide.  
+- No custom frontend as a blocker before you can generate (optional Phase N only).
+
+**ComfyUI itself is in-scope** — as an automated backend, not as a UI you operate.
+
+---
+
+## Repo role going forward
+
+This repository becomes a **Windows 4090 playbook + curated defaults**, not a DIY Comfy lab:
+
+| Artifact | Purpose |
+| --- | --- |
+| `PLAN.md` (this file) | Architecture + constraints |
+| `SETUP-WINDOWS.md` (next) | Click-by-click Stability Matrix guide |
+| `MODELS.md` (next) | Starter Illustrious/SDXL/Flux/Wan list + where files go |
+| Optional scripts | e.g. open known model folders; never required for core use |
+| Optional later UI | Only if SM Inference still isn’t “Imagine-simple” enough |
+
+Building a greenfield chat UI that re-implements model import + Wan tabs would duplicate Stability Matrix without buying ease.
+
+---
+
+## Phased plan (revised)
+
+### Phase 0 — Prep (local machine)
+- Confirm free disk on NVMe, NVIDIA driver current, 4090 visible in Task Manager / `nvidia-smi` if you have it.  
+- Decide Data Directory drive (models live here long-term).
+
+### Phase 1 — Zero-DIY studio (primary deliverable)
+- Install Stability Matrix.  
+- Install ComfyUI **only as the managed package**.  
+- Use **Inference only**.  
+- Import Illustrious + SDXL via drag-drop or Model Browser.  
+- Smoke tests: Illustrious T2I, SDXL T2I, one Wan I2V.
+
+### Phase 2 — Library hygiene
+- Folders for Checkpoints / LoRA / VAE / video.  
+- Naming conventions; CivitAI metadata on.  
+- Short Illustrious vs Flux prompting cheat sheet in `MODELS.md`.
+
+### Phase 3 — Optional SwarmUI
+- Install via Package Manager if you want a second no-node Generate surface (grids, video models, power dials).  
+- Still shared models; still no graph.
+
+### Phase 4 — Only if needed: thinner “Imagine” shell
+- If Inference still feels too dense, wrap **only** prompt + mode + model dropdown + gallery.  
+- Backend remains Stability Matrix–managed Comfy — you still don’t set it up.
+
+---
+
+## Decision summary
+
+| Decision | Choice |
+| --- | --- |
+| Front door | **Stability Matrix Inference** on Windows 11 |
+| Engine | **ComfyUI** — auto-installed, API-only from your POV |
+| Workflows | **Auto-built** by Inference/Swarm from UI settings |
+| Comfy dashboard | **Never part of the user path** |
+| Model intake | **Drag-drop + in-app Model Browser** |
+| Anime/illust | **Illustrious XL checkpoints** (SDXL family) |
+| General SDXL | At least one non-Illustrious SDXL ckpt |
+| Video | Wan tabs in Inference; LTX optional |
+| GPU tier | RTX 4090 full pack |
+| Hand-authored Comfy graphs | **Out of scope for you** |
+| Custom chat UI | Deferred; not required to start |
+
+---
+
+## Immediate next docs to add in this repo
+
+1. `SETUP-WINDOWS.md` — install Stability Matrix → Comfy package → Inference → first Illustrious image.  
+2. `MODELS.md` — concrete starter downloads + drag-drop destinations + Illustrious prompt basics.  
+
+---
+
+## Sources
+
+- [Stability Matrix overview](https://docs.lykos.ai/stability-matrix/getting-started/overview.html)  
+- [Inference overview](https://docs.lykos.ai/stability-matrix/inference/overview.html) (no node graph; Comfy under the hood)  
+- [Inference guide (wiki)](https://github.com/LykosAI/StabilityMatrix/wiki/Inference-Guide)  
+- [SwarmUI basic usage](https://github.com/mcmonkeyprojects/SwarmUI/blob/master/docs/Basic%20Usage.md)  
+- Illustrious = SDXL checkpoint ecosystem (CivitAI / OnomaAI); tag-style prompting  
+- Prior research: Flux / Qwen-Edit / Wan / LTX as optional quality lanes on 4090  
