@@ -12,7 +12,10 @@ Local image + video generation on your RTX 4090, aimed at Grok Imagine–level e
 
 ## Status
 
-Research & plan refined for the constraints above. See **[PLAN.md](./PLAN.md)**.
+Research & plan refined for the constraints above.
+
+- **[PLAN.md](./PLAN.md)** — architecture, constraints, phases  
+- **[CONCEPTS.md](./CONCEPTS.md)** — plain-language: ComfyUI vs Stability Matrix vs **SwarmUI**, drag-drop models, end-to-end flow  
 
 ## Next docs (planned)
 
