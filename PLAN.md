@@ -251,10 +251,14 @@ Building a greenfield chat UI that re-implements model import + Wan tabs would d
 
 ---
 
-## Immediate next docs to add in this repo
+## Repo deliverables (done)
 
 1. `SETUP-WINDOWS.md` — install Stability Matrix → Comfy package → Inference → first Illustrious image.  
-2. `MODELS.md` — concrete starter downloads + drag-drop destinations + Illustrious prompt basics.  
+2. `MODELS.md` — starter Illustrious/SDXL/video guidance + drag-drop destinations.  
+3. `CONCEPTS.md` — plain-language Comfy / SM / SwarmUI.  
+4. `scripts/windows/` — preflight + setup launcher + open model folders.
+
+**Remaining work is on the Windows 4090 PC:** run `scripts/windows/00-start-setup.ps1` and complete SETUP-WINDOWS smoke tests.  
 
 ---
 
